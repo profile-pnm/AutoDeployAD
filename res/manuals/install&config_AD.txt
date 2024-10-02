@@ -1,0 +1,99 @@
+## Установка и настройка Active Directory ##
+
+## Установка
+1. Установить пакет "task-samba-dc" (4.19.X)
+   --
+   root# apt-get install task-samba-dc
+   --
+2. Для совместимости с клиентской библиотекой libkrb5,
+   в файле "/etc/krb5.conf" и "/lib/alterator/defaults/krb5.conf"
+   закомментировать использование ядерного кэша ключей
+   --
+   # default_ccache_name = KEYRING:persistent:%{uid}
+   --
+3. Отключить службы: krb5kdc, slapd, bind
+   Можно через "acc" или "systemctl"
+
+## Создание нового домена
+1. Удалить базу и конфигурацию Samba
+   --
+   root# rm -f /etc/samba/smb.conf
+   root# rm -rf /var/lib/samba
+   root# rm -rf /var/cache/samba
+   root# mkdir -p /var/lib/samba/sysvol
+   --
+2. Установка имени домена
+   -- (например)
+   root# hostnamectl set-hostname dc.domain.alt
+   --
+   Если домен, имеет суффикс ".local", то необходимо отключить
+   службу "avahi-daemon"
+3. Изменение HOSTNAME в файле "/etc/sysconfig/network"
+   --
+   HOSTNAME=dc.domain.alt
+   --
+4. Остальные действия по смене хоста и домена
+   --
+   root# hostname dc.domain.alt
+   root# domainname domain.alt
+   --
+   
+## Создание домена с SAMBA_INTERNAL
+1. Ввести команду для создания DC "domain.alt"
+   --
+   root# samba-tool domain provision --realm=domain.alt \ 
+   --domain domain --adminpass='Pa$$word' \
+   --dns-backend=SAMBA_INTERNAL --server-role=dc
+   --
+2. Запуск службы Samba
+   --
+   root# systemctl enable --now samba
+   --
+
+## Настройка Kerberos
+1. Скопировать с заменой
+   --
+   root# cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+   --
+
+## Проверка работоспособности
+1. Общая инфа о домене
+   --
+   root# samba-tool domain info 127.0.0.1
+   --
+2. Просмотр предоставляемых служб
+   --
+   root# smbclient -L localhost -U administrator
+   --
+3. Проверка конфигурации DNS
+   --
+   host domain.alt
+   --
+   Если не находит домен, значит надо отредактировать
+   "/etc/resolv.conf"
+   --
+   nameserver 127.0.0.1
+   --
+4. Проверка имен хостов
+   --
+   root# host -t SRV _kerberos._udb.domain.alt.
+   root# host -t SRV _ldap._tcp.domain.alt.
+   root# host -t A c228.domain.alt.
+   --
+5. Проверка Kerberos:
+   --
+   root# kinit administrator
+   root# klist
+   --
+
+## Добавление пользователей
+1. Создание пользователя с паролем
+   --
+   root# samba-tool user create <name> --given-name='<name>' 
+   --mail-address='<name>@stand.alt'
+   root# samba-tool user setexpiry <name>
+   root# samba-tool user list
+   --
+
+## Добавление вторичного DC
+Для начала нужен второй сервер и на нем DC
